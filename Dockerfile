@@ -1,17 +1,31 @@
-FROM mcr.microsoft.com/playwright:v1.46.0-noble as playwright
+ARG FUNCTION_DIR="/var/task"
 
-FROM public.ecr.aws/lambda/nodejs:20
+FROM node:20-bookworm
 
-WORKDIR ${LAMBDA_TASK_ROOT}
-COPY package*.json src/index.ts  ./
+ARG FUNCTION_DIR
+
+RUN apt-get update && \
+    apt-get install -y \
+    g++ \
+    make \
+    cmake \
+    unzip \
+    libcurl4-openssl-dev
+
+RUN mkdir -p ${FUNCTION_DIR}
+WORKDIR ${FUNCTION_DIR}
+
+ENV NPM_CONFIG_CACHE=/tmp/.npm
+ENV PLAYWRIGHT_TMP_DIR=/tmp/
+ENV PLAYWRIGHT_BROWSERS_PATH=/var/task/ms-playwright
+
+COPY package*.json src/index.ts ./
+
 RUN npm install
+RUN npm install aws-lambda-ric
+RUN npx -y playwright@1.47.2 install chromium --with-deps
 RUN npm run build
 
-ENV PLAYWRIGHT_BROWSERS_PATH=/var/task/playwright
-RUN mkdir -p /var/task/playwright/chromium-1129/
-COPY --from=playwright /ms-playwright/chromium-1129/* /var/task/playwright/chromium-1129/
+ENTRYPOINT ["/usr/local/bin/npx", "aws-lambda-ric"]
 
 CMD ["dist/index.handler"]
-
-# /ms-playwright/chromium-1129/chrome-linux/chrome
-# /tmp/ms-playwright/chromium-1129/chrome-linux/chrome
